@@ -2,179 +2,132 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Asistencia Inteligente</title>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <title>Asistencia Pro</title>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; background:#f3f4f6; padding:20px; }
-    .card { background:#fff; padding:20px; border-radius:12px; max-width:480px; margin:auto; box-shadow:0 10px 25px rgba(0,0,0,.1);}    
-    h1 { text-align:center; }
-    input, button { width:100%; padding:10px; margin-top:8px; font-size:16px; }
-    button { border:none; border-radius:6px; cursor:pointer; }
-    .entrada { background:#22c55e; color:white; }
-    .salida { background:#64748b; color:white; }
-    .estado { margin-top:10px; font-size:14px; }
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg,#020617,#1e293b);
+      min-height:100vh;
+      padding:20px;
+      color:#0f172a;
+    }
+    .layout {
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:20px;
+      max-width:900px;
+      margin:auto;
+    }
+    .card {
+      background:#fff;
+      padding:20px;
+      border-radius:16px;
+      box-shadow:0 20px 40px rgba(0,0,0,.3);
+    }
+    h1,h2 { text-align:center; margin:0 0 10px 0; }
+    .sub { text-align:center; font-size:14px; color:#475569; margin-bottom:10px; }
+    input, button, select {
+      width:100%; padding:10px; margin-top:8px; font-size:15px;
+    }
+    button { border:none; border-radius:8px; cursor:pointer; }
+    .entrada{background:#22c55e;color:#fff;}
+    .salida{background:#64748b;color:#fff;}
+    .exportar{background:#0ea5e9;color:#fff;}
+    .mes{margin-top:10px;background:#f8fafc;padding:10px;border-radius:10px;}
+    .item{font-size:13px;border-bottom:1px dashed #cbd5f5;padding:4px 0;}
+    .resumen{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;}
+    .ok{color:#16a34a;} .alerta{color:#ea580c;}
+    @media(max-width:800px){.layout{grid-template-columns:1fr;}}
   </style>
 </head>
-<body>
-  <div class="card">
-    <h1>📋 Asistencia Inteligente</h1><label>Subir foto de la planilla</label>
-<input type="file" id="imagen" accept="image/*" />
+<body><div class="layout">  <!-- REGISTRO -->  <div class="card">
+    <h1>📋 Asistencia Pro</h1>
+    <div class="sub" id="mesActual"></div><input id="nombre" value="Marcos Mendez" />
+<input id="horaEntrada" type="time" value="08:10" />
+<input id="horaSalida" type="time" />
 
-<label>Nombre</label>
-<input id="nombre" value="MARCOS MENDEZ" />
+<button class="entrada" onclick="marcar('Entrada')">🟢 Marcar Entrada</button>
+<button class="salida" onclick="marcar('Salida')">⚪ Marcar Salida</button>
 
-<label>Ruta</label>
-<input id="ruta" />
+  </div>  <!-- VISTA / EXPORTACION -->  <div class="card" id="reporte">
+    <h2>👀 Vista previa / Exportar</h2><select id="filtro" onchange="cargar()">
+  <option value="mes">Mes actual</option>
+  <option value="semana">Semana actual</option>
+  <option value="todo">Todo</option>
+</select>
 
-<label>Andén</label>
-<input id="anden" />
+<div id="resumen"></div>
+<div id="log"></div>
 
-<label>Hora Entrada</label>
-<input id="entrada" type="time" value="08:10" />
+<button class="exportar" onclick="exportarImagen()">📸 Exportar selección</button>
 
-<label>Hora Salida</label>
-<input id="salida" type="time" />
+  </div></div><script>
+const logDiv = document.getElementById('log');
+const resumenDiv = document.getElementById('resumen');
+const mesActualDiv = document.getElementById('mesActual');
 
-<button class="entrada" onclick="guardar('Entrada')">Guardar Entrada</button>
-<button class="salida" onclick="guardar('Salida')">Guardar Salida</button>
+const ahora = new Date();
+mesActualDiv.innerText = ahora.toLocaleDateString('es-CL',{month:'long',year:'numeric'});
 
-<div class="estado" id="estado"></div>
+function marcar(tipo){
+  const data = JSON.parse(localStorage.getItem('asistencia'))||[];
+  data.push({
+    nombre:nombre.value,
+    tipo,
+    hora: tipo==='Entrada'?horaEntrada.value:horaSalida.value,
+    fecha:new Date()
+  });
+  localStorage.setItem('asistencia',JSON.stringify(data));
+  cargar();
+}
 
-  </div><script>
-const estado = document.getElementById('estado');
+function cargar(){
+  const filtro = document.getElementById('filtro').value;
+  const data = JSON.parse(localStorage.getItem('asistencia'))||[];
+  logDiv.innerHTML=''; resumenDiv.innerHTML='';
 
-imagen.addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+  let registros = data;
+  const hoy = new Date();
 
-  estado.innerText = '🔍 Analizando imagen…';
-
-  const result = await Tesseract.recognize(file, 'spa');
-  const text = result.data.text.toUpperCase();
-
-  // Buscar SOLO la fila donde aparece MARCOS MENDEZ
-  const lineas = text.split('n');
-  const miFila = lineas.find(l => l.includes('MARCOS') && l.includes('MENDEZ'));
-
-  if (!miFila) {
-    estado.innerText = '❌ No se encontró tu nombre en la imagen';
-    return;
+  if(filtro==='mes'){
+    registros = data.filter(r=>{
+      const d=new Date(r.fecha);
+      return d.getMonth()===hoy.getMonth() && d.getFullYear()===hoy.getFullYear();
+    });
   }
 
-  // Detectar ruta
-  if (miFila.includes('SAN MIGUEL')) ruta.value = 'San Miguel';
-  if (miFila.includes('LA FLORIDA')) ruta.value = 'La Florida';
-
-  // Detectar andén
-  const andenMatch = miFila.match(/(d+[A-Z]?)/);
-  if (andenMatch) anden.value = andenMatch[1];
-
-  estado.innerText = '✅ Tu fila fue detectada automáticamente';
-});
-
-function guardar(tipo) {
-  const data = JSON.parse(localStorage.getItem('asistencia')) || [];
-  data.unshift({
-    nombre: nombre.value,
-    ruta: ruta.value,
-    anden: anden.value,
-    tipo,
-    entrada: entrada.value,
-    salida: salida.value,
-    fecha: new Date().toLocaleDateString()
-  });
-  localStorage.setItem('asistencia', JSON.stringify(data));
-  alert('Registro guardado');
-}
-</script></body>
-</html><!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Asistencia Inteligente</title>
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; background:#f3f4f6; padding:20px; }
-    .card { background:#fff; padding:20px; border-radius:12px; max-width:480px; margin:auto; box-shadow:0 10px 25px rgba(0,0,0,.1);}    
-    h1 { text-align:center; }
-    input, button { width:100%; padding:10px; margin-top:8px; font-size:16px; }
-    button { border:none; border-radius:6px; cursor:pointer; }
-    .entrada { background:#22c55e; color:white; }
-    .salida { background:#64748b; color:white; }
-    .estado { margin-top:10px; font-size:14px; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>📋 Asistencia Inteligente</h1><label>Subir foto de la planilla</label>
-<input type="file" id="imagen" accept="image/*" />
-
-<label>Nombre</label>
-<input id="nombre" value="MARCOS MENDEZ" />
-
-<label>Ruta</label>
-<input id="ruta" />
-
-<label>Andén</label>
-<input id="anden" />
-
-<label>Hora Entrada</label>
-<input id="entrada" type="time" value="08:10" />
-
-<label>Hora Salida</label>
-<input id="salida" type="time" />
-
-<button class="entrada" onclick="guardar('Entrada')">Guardar Entrada</button>
-<button class="salida" onclick="guardar('Salida')">Guardar Salida</button>
-
-<div class="estado" id="estado"></div>
-
-  </div><script>
-const estado = document.getElementById('estado');
-
-imagen.addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  estado.innerText = '🔍 Analizando imagen…';
-
-  const result = await Tesseract.recognize(file, 'spa');
-  const text = result.data.text.toUpperCase();
-
-  // Buscar SOLO la fila donde aparece MARCOS MENDEZ
-  const lineas = text.split('n');
-  const miFila = lineas.find(l => l.includes('MARCOS') && l.includes('MENDEZ'));
-
-  if (!miFila) {
-    estado.innerText = '❌ No se encontró tu nombre en la imagen';
-    return;
+  if(filtro==='semana'){
+    const inicio=new Date(hoy); inicio.setDate(hoy.getDate()-hoy.getDay());
+    registros = data.filter(r=>new Date(r.fecha)>=inicio);
   }
 
-  // Detectar ruta
-  if (miFila.includes('SAN MIGUEL')) ruta.value = 'San Miguel';
-  if (miFila.includes('LA FLORIDA')) ruta.value = 'La Florida';
-
-  // Detectar andén
-  const andenMatch = miFila.match(/(d+[A-Z]?)/);
-  if (andenMatch) anden.value = andenMatch[1];
-
-  estado.innerText = '✅ Tu fila fue detectada automáticamente';
-});
-
-function guardar(tipo) {
-  const data = JSON.parse(localStorage.getItem('asistencia')) || [];
-  data.unshift({
-    nombre: nombre.value,
-    ruta: ruta.value,
-    anden: anden.value,
-    tipo,
-    entrada: entrada.value,
-    salida: salida.value,
-    fecha: new Date().toLocaleDateString()
+  let dias=new Set(); let atrasos=0;
+  registros.forEach(r=>{
+    const d=new Date(r.fecha);
+    dias.add(d.toDateString());
+    if(r.tipo==='Entrada' && r.hora>'08:10') atrasos++;
+    const div=document.createElement('div');
+    div.className='item';
+    div.innerText=`${d.toLocaleDateString()} ${r.hora||''} — ${r.tipo}`;
+    logDiv.appendChild(div);
   });
-  localStorage.setItem('asistencia', JSON.stringify(data));
-  alert('Registro guardado');
+
+  resumenDiv.innerHTML=`
+    <div class="resumen"><span>📅 Días trabajados</span><strong>${dias.size}</strong></div>
+    <div class="resumen"><span>⚠️ Atrasos</span><strong class="${atrasos? 'alerta':'ok'}">${atrasos}</strong></div>
+  `;
 }
+
+function exportarImagen(){
+  html2canvas(document.getElementById('reporte')).then(c=>{
+    const a=document.createElement('a');
+    a.download='asistencia.png';
+    a.href=c.toDataURL();
+    a.click();
+  });
+}
+
+cargar();
 </script></body>
 </html>
